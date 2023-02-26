@@ -171,12 +171,22 @@ class _WebSocketManager:
         self.attempting_connection = False
 
     def _auth(self):
-        """
-        Authorize websocket connection.
-        """
-
         # Generate expires.
-        expires = _helpers.generate_timestamp() + 1000
+        # expires = _helpers.generate_timestamp() + 1000
+        attempt = 0
+        timedata = 0
+        while True and attempt < 12 :
+            try:
+                timedata = requests.get('https://api-testnet.bybit.com/v3/public/time')
+                break
+            except:
+                attempt += 1
+                time.sleep(1)
+        timestamp_offset = int(timedata.json()['result']['timeSecond']) - int(time.time() * 1000)
+        offset = int(time.time() * 1000 + timestamp_offset)
+        #add user-agent
+        #add auth info
+        expires = str(offset)+"000"
 
         # Generate signature.
         _val = f"GET/realtime{expires}"
