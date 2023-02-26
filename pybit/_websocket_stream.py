@@ -6,6 +6,7 @@ import hmac
 import logging
 import re
 import copy
+import requests
 from . import HTTP
 from . import _helpers
 
