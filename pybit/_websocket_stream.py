@@ -185,8 +185,6 @@ class _WebSocketManager:
                 time.sleep(1)
         timestamp_offset = int(timedata.json()['result']['timeSecond']) - int(time.time() * 1000)
         offset = int(time.time() * 1000 + timestamp_offset)
-        #add user-agent
-        #add auth info
         expires = str(offset)+"000"
 
         # Generate signature.
