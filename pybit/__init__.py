@@ -25,6 +25,7 @@ from datetime import datetime as dt
 from concurrent.futures import ThreadPoolExecutor
 
 from .exceptions import FailedRequestError, InvalidRequestError
+from . import _helpers
 
 # Requests will use simplejson if available.
 try:
@@ -33,7 +34,7 @@ except ImportError:
     from json.decoder import JSONDecodeError
 
 # Versioning.
-VERSION = '2.4.1'
+VERSION = '3.0.0rc5'
 
 
 class HTTP:
@@ -1701,7 +1702,7 @@ class HTTP:
         # Append required parameters.
         params['api_key'] = api_key
         params['recv_window'] = recv_window
-        params['timestamp'] = int(time.time() * 10 ** 3)
+        params['timestamp'] = _helpers.generate_timestamp()
 
         # Sort dictionary alphabetically to create querystring.
         _val = '&'.join(

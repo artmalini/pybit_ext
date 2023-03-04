@@ -35,6 +35,6 @@ class InvalidRequestError(Exception):
         self.status_code = status_code
         self.time = time
         super().__init__(
-            f'{message.capitalize()} (ErrCode: {status_code}) (ErrTime: {time})'
+            f'{message} (ErrCode: {status_code}) (ErrTime: {time})'
             f'.\nRequest → {request}.'
         )

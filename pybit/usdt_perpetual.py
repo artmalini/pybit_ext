@@ -649,6 +649,45 @@ class HTTP(_FuturesHTTPManager):
     These methods use two or more requests to perform a specific
     function and are exclusive to pybit.
     '''
+    def close_position_limit(self, symbol, price):
+        """
+        Closes your open position. Makes two requests (position, order).
+
+        Parameters
+        ------------------------
+        symbol : str
+            Required parameter. The symbol of the limit as a string,
+            e.g. "BTCUSD".
+
+        """
+
+        # First we fetch the user's position.
+        try:
+            r = self.my_position(symbol=symbol)["result"]
+
+        # If there is no returned position, we want to handle that.
+        except KeyError:
+            return self.logger.error("No position detected.")
+
+        # Next we generate a list of limit orders
+        orders = [
+            {
+                "symbol": symbol,
+                "order_type": "Limit",
+                "side": "Buy" if p["side"] == "Sell" else "Sell",
+                "qty": p["size"],
+                "time_in_force": "GoodTillCancelled",
+                "reduce_only": True,
+                "close_on_trigger": True,
+                "position_idx": p["position_idx"]
+            } for p in (r if isinstance(r, list) else [r]) if p["size"] > 0
+        ]
+
+        if len(orders) == 0:
+            return self.logger.error("No position detected.")
+
+        # Submit a market order against each open position for the same qty.
+        return self.place_active_order_bulk(orders)
 
     def close_position(self, symbol):
         """
