@@ -676,7 +676,8 @@ class HTTP(_FuturesHTTPManager):
                 "order_type": "Limit",
                 "side": "Buy" if p["side"] == "Sell" else "Sell",
                 "qty": p["size"],
-                "time_in_force": "GoodTillCancelled",
+                "price": price,
+                "time_in_force": "ImmediateOrCancel",
                 "reduce_only": True,
                 "close_on_trigger": True,
                 "position_idx": p["position_idx"]

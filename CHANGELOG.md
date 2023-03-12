@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [3.0.0rc5] - 2023-02-02
+### Added
+- `copy_trading` module for the [Copy Trading](https://bybit-exchange.github.io/docs/copy_trading/) HTTP API and WebSocket
+
+### Modified
+- `requirements.txt` to require the latest version of `websocket-client`: `1.5.0`.
+  - If you are facing any problems with the WebSocket, ensure you upgrade to the right version of the dependency and try again. Upgrade like so: `python -m pip install -r requirements.txt`
+- WebSocket pings (again)
+
+
+## [3.0.0rc4] - 2023-01-31
+### Modified
+- How WebSocket pings are sent in an effort to keep connections open longer
+
+## [3.0.0rc3] - 2023-01-27
+### Fixed
+- Failure to resubscribe to private spot topics when reconnecting WebSocket
+
+### Modified
+- WebSocket error handling
+
+## [3.0.0rc2] - 2023-01-05
+### Fixed
+- Failure to pass request parameters in certain methods
+
+
+## [3.0.0rc1] - 2023-01-04
+### Fixed
+- Wrong endpoint paths in `spot`
+
+### Modified
+- Refactored WebSocket's `test` arg to `testnet`
+- Hardcoded WebSocket arguments into the child class the user accesses – meaning the user can easily see them, and IDEs should autocomplete them
+  - (For v3 WebSockets only: `contract`, `unified_margin`, `spot`)
+
+
+## [3.0.0rc0] - 2022-12-28
+This version upgrades pybit to Bybit's version 3 (v3) APIs. Some old API modules are maintained due to lack of or only partial support in v3. Method names have been improved and conform to an intuitive standard.
+
+Future modules will be removed as Bybit's APIs are further unified so that they may be accessible from just one or two modules which should generally be divided by account type (eg, unified margin) rather than by market type (eg USDT perpetual).
+
+This is a pre-release, as indicated by the `rc` (release candidate) in the version number. Future versions may have breaking changes. An imminent major version of the Bybit API will introduce major changes before these v3 APIs make it to the production version.
+
+## Added
+- Bybit's main v3 HTTP and WebSocket APIs:
+  - `contract` – inverse perpetuals, inverse futures, USDT perpetuals, and USDC options
+  - `unified_margin` – USDT perpetuals and USDC options
+
+## Modified
+- `spot` to use v3 HTTP API and WebSocket APIs
+- `account_asset` to use v3 HTTP API
+
+## Removed
+- `usdt_perpetual` because it is now accessible via `contract` and `unified_margin`
+
+
+## [2.4.1rc0] - 2022-10-07
+## Modified
+- `is_connected()` and the WebSocket reconnection logic. 
+
+
 ## [2.4.1] - 2022-10-07
 - See below release candidates for further changes.
 

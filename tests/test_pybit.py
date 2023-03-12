@@ -1,5 +1,6 @@
 import unittest, time
-from pybit import HTTP, WebSocket
+from pybit import HTTP
+from pybit.usdt_perpetual import WebSocket
 
 session = HTTP('https://api.bybit.com')
 ws = WebSocket('wss://stream.bybit.com/realtime',

@@ -8,170 +8,218 @@ documentation.
 
 The following functions are available:
 
-exit()
-
-Public Methods:
+Public Methods: 
 ------------------------
-orderbook()
-query_kline()
-latest_information_for_symbol()
-public_trading_records()
-query_symbol()
-liquidated_orders()
-query_mark_price_kline()
-query_index_price_kline()
-query_premium_index_kline()
-open_interest()
-latest_big_deal()
-long_short_ratio()
-get_the_last_funding_rate()
 
-Private Methods:
+API Data endpoints:
+
+get_server_time()
+
+Market Data Endpoints:
+
+get_instruments()
+get_order_book()
+get_merged_order_book()
+get_public_trading_history()
+get_klines()
+get_tickers()
+get_last_traded_price()
+get_best_bid_ask_price()
+
+Leveraged Token Endpoints:
+
+get_leveraged_token_asset_info()
+
+Institutional Loan Endpoints:
+
+get_institutional_loan_products()
+get_institutional_loan_margin_coins()
+
+
+Account Asset:
 (requires authentication)
 ------------------------
-place_active_order()
-get_active_order()
-cancel_active_order()
-cancel_all_active_orders()
-replace_active_order()
-query_active_order()
 
-place_conditional_order()
-get_conditional_order()
-cancel_conditional_order()
-cancel_all_conditional_orders()
-replace_conditional_order()
-query_conditional_order()
+Transfer Data Endpoints: 
 
-user_leverage()
-change_user_leverage()
-cross_isolated_margin_switch()
-position_mode_switch()
-full_partial_position_tp_sl_switch()
-
-my_position()
-change_margin()
-set_trading_stop()
-
-query_trading_fee_rate()
-
-get_risk_limit()
-set_risk_limit()
-
-my_last_funding_fee()
-predicted_funding_rate()
-
-api_key_info()
-
-get_wallet_balance()
-wallet_fund_records()
-withdraw_records()
-user_trade_records()
-
-server_time()
-announcement()
-
-Spot Methods:
-(many of the above methods can also be used with the spot market, provided the argument spot=True is passed)
-------------------------
-fast_cancel_active_order()
-batch_cancel_active_order()
-batch_fast_cancel_active_order()
-batch_cancel_active_order_by_ids()
-
-Asset Transfer Methods:
-------------------------
 create_internal_transfer()
 create_subaccount_transfer()
-query_transfer_list()
-query_subaccount_transfer_list()
-query_subaccount_list()
+get_internal_transfer_list()
+get_subaccount_transfer_list()
+get_subaccount_list()
+enable_universal_transfer()
+create_universal_transfer()
+get_universal_transfer_list()
+get_transferable_coin_list()
+get_account_coin_balance()
+get_asset_info()
 
-Custom Methods:
+Withdraw and Deposit Endpoints:
+
+get_supported_deposit_list()
+get_deposit_records()
+get_sub_deposit_records_by_master_key()
+get_withdraw_records()
+get_coin_info()
+withdraw()
+cancel_withdrawal()
+get_master_deposit_addresses()
+get_sub_deposit_addresses()
+
+Master-Sub User Endpoints:
+
+create_sub_uid()
+create_sub_uid_api_key()
+get_sub_uid_list()
+freeze_sub_uid()
+get_api_key_info()
+modify_master_api_key()
+modify_sub_api_key()
+delete_master_api_key()
+delete_sub_api_key()
+
+
+Spot:
 (requires authentication)
 ------------------------
-place_active_order_bulk()
-cancel_active_order_bulk()
-place_conditional_order_bulk()
-cancel_conditional_order_bulk()
-close_position()
 
-Cross Margin Trading Methods:
+Wallet Data Endpoints:
+
+get_wallet_balance()
+
+
+Leveraged Token Endpoints:
+
+get_leveraged_token_market_info()
+purchase_leveraged_token()
+redeem_leveraged_token()
+get_leveraged_token_purchase_redemption_history()
+
+
+Cross Margin Trading Endpoints:
+
+borrow_cross_margin_loan()
+repay_cross_margin_loan()
+get_cross_margin_borrowing_info()
+get_cross_margin_account_info()
+get_cross_margin_interest_quota()
+get_cross_margin_repayment_history()
+
+
+Institutional Loan Endpoints:
+
+get_institutional_loans()
+get_institutional_loan_repayment_history()
+get_institutional_loan_ltv()
+
+
+Unified Margin Account: 
+(requires authentication)
 ------------------------
-borrow_margin_loan()
-repay_margin_loan()
-query_borrowing_info()
-query_account_info()
-query_interest_quota()
-query_repayment_history()
 
-Leveraged Tokens Trading Methods:
-------------------------
-lt_asset_info()
-lt_market_info()
-lt_purchase()
-lt_redeem()
-lt_purchase_redemption_history()
+Order actions:
+
+place_order()
+replace_order()
+cancel_order()
+get_open_orders()
+get_orders()
+batch_place_order()
+batch_replace_order()
+batch_cancel_order()
+cancel_all_orders()
+
+Position actions:
+
+get_position()
+set_leverage()
+switch_tp_sl_mode()
+set_risk_limit()
+set_trading_stop()
+get_trade_history()
+get_usdc_options_settlement_history()
+get_usdc_perpetuals_settlement_history()
 
 
+Account actions: 
 
-
+get_wallet_balance()
+upgrade_to_unified_margin_account()
+get_transaction_log()
+get_exchange_coins_history()
+get_borrowing_history()
+get_borrowing_rate()
+set_margin_mode()
+get_account_info()
 """
 
-# Import pybit and define the HTTP object.
-from pybit import HTTP  # supports inverse perp & futures, usdt perp, spot.
-from pybit.spot import HTTP
-from pprint import pprint
-"""
-Some methods might need extra arguments due to the current Bybit APIs - 
-which are divided across market types. To ensure you're sending requests to 
-a specific market type, like Inverse Perpetual, you can import and define 
-HTTP like so:
 
-from pybit.inverse_perpetual import HTTP   <-- exclusively supports spot.
-"""
-from pybit import inverse_perpetual  # <-- import HTTP & WSS for inverse perp
-from pybit import spot  # <-- import HTTP & WSS for spot
+# Import pybit and define the HTTP object, alias them with specifc usage
+from pybit.spot import HTTP as spot_session
+from pybit.unified_margin import HTTP as unified_margin_session
+from pybit.account_asset import HTTP as account_asset
 
-"""
-You can create an authenticated or unauthenticated HTTP session. 
-You can skip authentication by not passing any value for the key and secret.
-"""
 
-# Unauthenticated
-session_unauth = inverse_perpetual.HTTP(endpoint="https://api.bybit.com")
+# For ease of use, create abstraction layer to use `auth_required` functions. 
+# To use actual API, use `is_testnet` = False
+class SpotManager:
+    def __init__(self, api_key: str, api_secret: str, is_testnet: bool = True):
+        self.api_key = api_key
+        self.api_secret = api_secret
+        if is_testnet:
+            self.endpoint = 'https://api-testnet.bybit.com'
+        self.session = spot_session(
+            endpoint=self.endpoint,
+            api_key=api_key,
+            api_secret=api_secret
+        )
 
-# Authenticated
-session_auth = inverse_perpetual.HTTP(
-    endpoint="https://api.bybit.com",
-    api_key="...",
-    api_secret="..."
+spot_manager = SpotManager(api_key='...', api_secret='...', is_testnet=False)
+spot_manager.session.get_wallet_balance()
+
+# To access public endpoints
+# If endpoint parameter is not specified, by default it uses "https://api.bybit.com"
+session_unauth = spot_session()
+
+# Let's get last traded price for BTC, note symbol "BTCUSDT"
+session_unauth.get_last_traded_price(symbol="BTCUSDT")
+
+
+# Similar like we created SpotManager, we can create UnifiedMargin object with correct seesion 
+class UnifiedMarginManager:
+    def __init__(self, api_key: str, api_secret: str, is_testnet: bool = True):
+        self.api_key = api_key
+        self.api_secret = api_secret
+        if is_testnet:
+            self.endpoint = 'https://api-testnet.bybit.com'
+        self.session = unified_margin_session(
+            endpoint=self.endpoint,
+            api_key=api_key,
+            api_secret=api_secret
+        )
+
+
+unified_manager = UnifiedMarginManager(api_key='...', api_secret='...', is_testnet=False)
+unified_manager.session.get_account_info()
+
+# In case you receive error displayed below, account upgrade needs to be made: https://www.bybit.com/en-US/promo/events/unified-trading-account/
+# pybit.exceptions.InvalidRequestError: The API can only be accessed by unified account users. (ErrCode: 10020) (ErrTime: 18:10:53).
+# Otherwise response should be successfull
+
+# To get balace (within unified margin) for specific coin. Note coin and coin name - "USDT"
+unified_manager.session.get_wallet_balance(coin="USDT")
+
+
+# To use API directly without extra class follow example below:
+
+account_asset(
+    api_key='...',
+    api_secret='...',
+    endpoint='mainnte or testnet endpoint'
+).create_internal_transfer(
+    transferId="UUID",
+    coin="COIN",
+    amount="10.0",
+    fromAccountType="AccountTypeFrom",
+    toAccountType="AccountTypeTo"
 )
-
-# Let's get market information about EOSUSD. Note that "symbol" is
-# a required parameter as per the Bybit API documentation.
-session_unauth.latest_information_for_symbol(symbol="EOSUSD")
-
-# We can fetch our wallet balance using an auth'd session.
-session_auth.get_wallet_balance(coin="BTC")
-
-
-"""
-Spot & other APIs.
-from pybit import HTTP  <-- supports inverse perp & futures, usdt perp, spot.
-from pybit.spot import HTTP   <-- exclusively supports spot.
-"""
-
-# Reassign session_auth to exclusively use spot.
-session_auth = spot.HTTP(
-    endpoint="https://api.bybit.com",
-    api_key="...",
-    api_secret="..."
-)
-
-
-# Prefer spot endpoint via the `spot` arg
-session_unauth = HTTP(endpoint="https://api.bybit.com")
-
-# Require spot endpoint (`spot` arg unnecessary)
-session_auth.get_wallet_balance(coin="BTC")
