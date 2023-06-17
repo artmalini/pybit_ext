@@ -307,6 +307,12 @@ class WebSocket:
             self.active_connections.append(self.ws_private)
         self.ws_private.subscribe(topic, callback)
 
+    def close_connection(self):
+        if self.ws_public:
+            self.ws_public.exit()
+        if self.ws_private:
+            self.ws_public.exit()
+
     def orderbook_stream(self, callback, symbol):
         """
         This topic always returns messages in the "snapshot" format for a
