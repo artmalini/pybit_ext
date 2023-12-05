@@ -4,12 +4,8 @@ import time
 import json
 import hmac
 import logging
-from Crypto.Hash import SHA256
-from Crypto.PublicKey import RSA
-from Crypto.Signature import PKCS1_v1_5
-import base64
+import re
 import copy
-from uuid import uuid4
 from . import _helpers
 
 
@@ -21,27 +17,19 @@ SUBDOMAIN_MAINNET = "stream"
 DOMAIN_MAIN = "bybit"
 DOMAIN_ALT = "bytick"
 
+USDC_PERPETUAL = "USDC Perp"
+USDC_OPTIONS = "USDC Options"
+COPY_TRADING = "Copy Trading"
+
 
 class _WebSocketManager:
-    def __init__(
-        self,
-        callback_function,
-        ws_name,
-        testnet,
-        domain="",
-        rsa_authentication=False,
-        api_key=None,
-        api_secret=None,
-        ping_interval=20,
-        ping_timeout=10,
-        retries=10,
-        restart_on_error=True,
-        trace_logging=False,
-        private_auth_expire=1
-    ):
+    def __init__(self, callback_function, ws_name,
+                 testnet, domain="", api_key=None, api_secret=None,
+                 ping_interval=20, ping_timeout=10, retries=10,
+                 restart_on_error=True, trace_logging=False):
+
         self.testnet = testnet
         self.domain = domain
-        self.rsa_authentication = rsa_authentication
 
         # Set API keys.
         self.api_key = api_key
@@ -51,9 +39,6 @@ class _WebSocketManager:
         self.ws_name = ws_name
         if api_key:
             self.ws_name += " (Auth)"
-        
-        # Delta time for private auth expiration in seconds
-        self.private_auth_expire = private_auth_expire
 
         # Setup the callback directory following the format:
         #   {
@@ -119,8 +104,13 @@ class _WebSocketManager:
                 # no previous WSS connection.
                 return
 
-            for req_id, subscription_message in self.subscriptions.items():
-                self.ws.send(subscription_message)
+            if type(self.subscriptions) == list:  # v1/2
+                for subscription_message in self.subscriptions:
+                    self.ws.send(subscription_message)
+            else:  # v3, dict
+                # Stored as a dict for those v3 WS which use a req_id
+                for req_id, subscription_message in self.subscriptions.items():
+                    self.ws.send(subscription_message)
 
         self.attempting_connection = True
 
@@ -130,6 +120,10 @@ class _WebSocketManager:
         url = url.format(SUBDOMAIN=subdomain, DOMAIN=domain)
         self.endpoint = url
 
+        self.public_v1_websocket = True if url.endswith("v1") else False
+        self.public_v2_websocket = True if url.endswith("v2") else False
+        self.private_websocket = True if url.endswith("/spot/ws") else False
+
         # Attempt to connect for X seconds.
         retries = self.retries
         if retries == 0:
@@ -137,9 +131,7 @@ class _WebSocketManager:
         else:
             infinitely_reconnect = False
 
-        while (
-            infinitely_reconnect or retries > 0
-        ) and not self.is_connected():
+        while (infinitely_reconnect or retries > 0) and not self.is_connected():
             logger.info(f"WebSocket {self.ws_name} attempting connection...")
             self.ws = websocket.WebSocketApp(
                 url=url,
@@ -151,12 +143,10 @@ class _WebSocketManager:
             )
 
             # Setup the thread running WebSocketApp.
-            self.wst = threading.Thread(
-                target=lambda: self.ws.run_forever(
-                    ping_interval=self.ping_interval,
-                    ping_timeout=self.ping_timeout,
-                )
-            )
+            self.wst = threading.Thread(target=lambda: self.ws.run_forever(
+                ping_interval=self.ping_interval,
+                ping_timeout=self.ping_timeout
+            ))
 
             # Configure as daemon; start.
             self.wst.daemon = True
@@ -173,8 +163,7 @@ class _WebSocketManager:
                 raise websocket.WebSocketTimeoutException(
                     f"WebSocket {self.ws_name} ({self.endpoint}) connection "
                     f"failed. Too many connection attempts. pybit will no "
-                    f"longer try to reconnect."
-                )
+                    f"longer try to reconnect.")
 
         logger.info(f"WebSocket {self.ws_name} connected")
 
@@ -191,56 +180,38 @@ class _WebSocketManager:
         Authorize websocket connection.
         """
 
-        def generate_hmac():
-            hash = hmac.new(
-                bytes(self.api_secret, "utf-8"),
-                bytes(_val, "utf-8"),
-                digestmod="sha256",
-            )
-            return hash.hexdigest()
-
-        def generate_rsa():
-            private_key = RSA.importKey(self.api_secret)
-            encoded_param_str = SHA256.new(_val.encode("utf-8"))
-            signature = PKCS1_v1_5.new(private_key).sign(encoded_param_str)
-            return base64.b64encode(signature).decode()
-
         # Generate expires.
-        expires = _helpers.generate_timestamp() + (self.private_auth_expire * 1000)
+        expires = _helpers.generate_timestamp() + 1000
 
         # Generate signature.
         _val = f"GET/realtime{expires}"
-
-        if not self.rsa_authentication:
-            signature = generate_hmac()
-        else:
-            signature = generate_rsa()
+        signature = str(hmac.new(
+            bytes(self.api_secret, "utf-8"),
+            bytes(_val, "utf-8"), digestmod="sha256"
+        ).hexdigest())
 
         # Authenticate with API.
         self.ws.send(
-            json.dumps(
-                {"op": "auth", "args": [self.api_key, expires, signature]}
-            )
+            json.dumps({
+                "op": "auth",
+                "args": [self.api_key, expires, signature]
+            })
         )
 
     def _on_error(self, error):
         """
         Exit on errors and raise exception, or attempt reconnect.
         """
-        if type(error).__name__ not in [
-            "WebSocketConnectionClosedException",
-            "ConnectionResetError",
-            "WebSocketTimeoutException",
-        ]:
+        if type(error).__name__ not in ["WebSocketConnectionClosedException",
+                                        "ConnectionResetError",
+                                        "WebSocketTimeoutException"]:
             # Raises errors not related to websocket disconnection.
             self.exit()
             raise error
 
         if not self.exited:
-            logger.error(
-                f"WebSocket {self.ws_name} ({self.endpoint}) "
-                f"encountered error: {error}."
-            )
+            logger.error(f"WebSocket {self.ws_name} ({self.endpoint}) "
+                         f"encountered error: {error}.")
             self.exit()
 
         # Reconnect.
@@ -296,31 +267,25 @@ class _WebSocketManager:
         self.exited = True
 
 
-class _V5WebSocketManager(_WebSocketManager):
+class _FuturesWebSocketManager(_WebSocketManager):
     def __init__(self, ws_name, **kwargs):
-        callback_function = (
-            kwargs.pop("callback_function")
-            if kwargs.get("callback_function")
-            else self._handle_incoming_message
-        )
+        callback_function = kwargs.pop("callback_function") if \
+            kwargs.get("callback_function") else self._handle_incoming_message
         super().__init__(callback_function, ws_name, **kwargs)
 
-        self.subscriptions = {}
+        self.private_topics = ["position", "execution", "order", "stop_order",
+                               "wallet", "copyTradePosition",
+                               "copyTradeExecution", "copyTradeOrder",
+                               "copyTradeWallet"]
 
-        self.private_topics = [
-            "position",
-            "execution",
-            "order",
-            "wallet",
-            "greeks",
-        ]
+        self.symbol_wildcard = "*"
+        self.symbol_separator = "|"
 
-    def subscribe(
-            self,
-            topic: str,
-            callback,
-            symbol: (str, list) = False
-    ):
+    def subscribe(self, topic, callback, symbol=None):
+        if symbol is None:
+            symbol = []
+        elif type(symbol) == str:
+            symbol = [symbol]
 
         def prepare_subscription_args(list_of_symbols):
             """
@@ -333,28 +298,24 @@ class _V5WebSocketManager(_WebSocketManager):
                 return [topic]
 
             topics = []
-            for single_symbol in list_of_symbols:
-                topics.append(topic.format(symbol=single_symbol))
+            for symbol in list_of_symbols:
+                topics.append(topic.format(symbol))
             return topics
-
-        if type(symbol) == str:
-            symbol = [symbol]
 
         subscription_args = prepare_subscription_args(symbol)
         self._check_callback_directory(subscription_args)
 
-        req_id = str(uuid4())
-
-        subscription_message = json.dumps(
-            {"op": "subscribe", "req_id": req_id, "args": subscription_args}
-        )
         while not self.is_connected():
             # Wait until the connection is open before subscribing.
             time.sleep(0.1)
+
+        subscription_message = json.dumps({
+                "op": "subscribe",
+                "args": subscription_args
+            })
         self.ws.send(subscription_message)
-        self.subscriptions[req_id] = subscription_message
-        for topic in subscription_args:
-            self._set_callback(topic, callback)
+        self.subscriptions.append(subscription_message)
+        self._set_callback(topic, callback)
 
     def _initialise_local_data(self, topic):
         # Create self.data
@@ -368,44 +329,31 @@ class _V5WebSocketManager(_WebSocketManager):
 
         # Record the initial snapshot.
         if "snapshot" in message["type"]:
-            self.data[topic] = message["data"]
-            return
+            if type(message["data"]) is list:
+                self.data[topic] = message["data"]
+            elif message["data"].get("order_book"):
+                self.data[topic] = message["data"]["order_book"]
+            elif message["data"].get("orderBook"):
+                self.data[topic] = message["data"]["orderBook"]
 
         # Make updates according to delta response.
-        book_sides = {"b": message["data"]["b"], "a": message["data"]["a"]}
+        elif "delta" in message["type"]:
 
-        for side, entries in book_sides.items():
-            for entry in entries:
-                # Delete.
-                if float(entry[1]) == 0:
-                    index = _helpers.find_index(
-                        self.data[topic][side], entry, 0
-                    )
-                    self.data[topic][side].pop(index)
-                    continue
+            # Delete.
+            for entry in message["data"]["delete"]:
+                index = _helpers.find_index(self.data[topic], entry, "id")
+                self.data[topic].pop(index)
 
-                # Insert.
-                price_level_exists = entry[0] in [
-                    level[0] for level in self.data[topic][side]
-                ]
-                if not price_level_exists:
-                    self.data[topic][side].append(entry)
-                    continue
+            # Update.
+            for entry in message["data"]["update"]:
+                index = _helpers.find_index(self.data[topic], entry, "id")
+                self.data[topic][index] = entry
 
-                # Update.
-                qty_changed = entry[1] != next(
-                    level[1]
-                    for level in self.data[topic][side]
-                    if level[0] == entry[0]
-                )
-                if price_level_exists and qty_changed:
-                    index = _helpers.find_index(
-                        self.data[topic][side], entry, 0
-                    )
-                    self.data[topic][side][index] = entry
-                    continue
+            # Insert.
+            for entry in message["data"]["insert"]:
+                self.data[topic].append(entry)
 
-    def _process_delta_ticker(self, message, topic):
+    def _process_delta_instrument_info(self, message, topic):
         self._initialise_local_data(topic)
 
         # Record the initial snapshot.
@@ -414,8 +362,10 @@ class _V5WebSocketManager(_WebSocketManager):
 
         # Make updates according to delta response.
         elif "delta" in message["type"]:
-            for key, value in message["data"].items():
-                self.data[topic][key] = value
+            # Update.
+            for update in message["data"]["update"]:
+                for key, value in update.items():
+                    self.data[topic][key] = value
 
     def _process_auth_message(self, message):
         # If we get successful futures auth, notify user
@@ -423,19 +373,15 @@ class _V5WebSocketManager(_WebSocketManager):
             logger.debug(f"Authorization for {self.ws_name} successful.")
             self.auth = True
         # If we get unsuccessful auth, notify user.
-        elif message.get("success") is False or message.get("type") == "error":
-            raise Exception(
-                f"Authorization for {self.ws_name} failed. Please check your "
-                f"API keys and restart. Raw error: {message}"
-            )
+        elif message.get("success") is False:
+            logger.debug(f"Authorization for {self.ws_name} failed. Please "
+                         f"check your API keys and restart.")
 
     def _process_subscription_message(self, message):
-        if message.get("req_id"):
-            sub = self.subscriptions[message["req_id"]]
-        else:
-            # if req_id is not supported, guess that the last subscription
-            # sent was successful
-            sub = json.loads(list(self.subscriptions.items())[0][1])["args"][0]
+        try:
+            sub = message["request"]["args"]
+        except KeyError:
+            sub = message["data"]["successTopics"]  # USDC private sub format
 
         # If we get successful futures subscription, notify user
         if message.get("success") is True:
@@ -443,18 +389,19 @@ class _V5WebSocketManager(_WebSocketManager):
         # Futures subscription fail
         elif message.get("success") is False:
             response = message["ret_msg"]
-            logger.error("Couldn't subscribe to topic." f"Error: {response}.")
+            logger.error("Couldn't subscribe to topic."
+                         f"Error: {response}.")
             self._pop_callback(sub[0])
 
     def _process_normal_message(self, message):
         topic = message["topic"]
-        if "orderbook" in topic:
+        if "orderBook" in topic:
             self._process_delta_orderbook(message, topic)
             callback_data = copy.deepcopy(message)
             callback_data["type"] = "snapshot"
             callback_data["data"] = self.data[topic]
-        elif "tickers" in topic:
-            self._process_delta_ticker(message, topic)
+        elif "instrument_info" in topic:
+            self._process_delta_instrument_info(message, topic)
             callback_data = copy.deepcopy(message)
             callback_data["type"] = "snapshot"
             callback_data["data"] = self.data[topic]
@@ -465,19 +412,13 @@ class _V5WebSocketManager(_WebSocketManager):
 
     def _handle_incoming_message(self, message):
         def is_auth_message():
-            if (
-                message.get("op") == "auth"
-                or message.get("type") == "AUTH_RESP"
-            ):
+            if message.get("request", {}).get("op") == "auth":
                 return True
             else:
                 return False
 
         def is_subscription_message():
-            if (
-                message.get("op") == "subscribe"
-                or message.get("type") == "COMMAND_RESP"
-            ):
+            if message.get("request", {}).get("op") == "subscribe":
                 return True
             else:
                 return False
@@ -489,18 +430,111 @@ class _V5WebSocketManager(_WebSocketManager):
         else:
             self._process_normal_message(message)
 
+    def custom_topic_stream(self, topic, callback):
+        return self.subscribe(topic=topic, callback=callback)
+
+    def _extract_topic(self, topic_string):
+        """
+        Regex to return the topic without the symbol.
+        """
+        def is_usdc_private_topic():
+            if re.search(r".*\..*\..*\.", topic_string):
+                return True
+
+        if topic_string in self.private_topics or is_usdc_private_topic():
+            return topic_string
+        topic_without_symbol = re.match(r".*(\..*|)(?=\.)", topic_string)
+        return topic_without_symbol[0]
+
+    @staticmethod
+    def _extract_symbol(topic_string):
+        """
+        Regex to return the symbol without the topic.
+        """
+        symbol_without_topic = re.search(r"(?!.*\.)[A-Z*|]*$", topic_string)
+        return symbol_without_topic[0]
+
     def _check_callback_directory(self, topics):
         for topic in topics:
             if topic in self.callback_directory:
-                raise Exception(
-                    f"You have already subscribed to this topic: " f"{topic}"
-                )
+                raise Exception(f"You have already subscribed to this topic: "
+                                f"{topic}")
 
     def _set_callback(self, topic, callback_function):
+        topic = self._extract_topic(topic)
         self.callback_directory[topic] = callback_function
 
     def _get_callback(self, topic):
+        topic = self._extract_topic(topic)
         return self.callback_directory[topic]
 
     def _pop_callback(self, topic):
+        topic = self._extract_topic(topic)
         self.callback_directory.pop(topic)
+
+
+class _USDCWebSocketManager(_FuturesWebSocketManager):
+    def __init__(self, ws_name, **kwargs):
+        super().__init__(
+            ws_name, callback_function=self._handle_incoming_message, **kwargs)
+
+    def _handle_incoming_message(self, message):
+        def is_auth_message():
+            if message.get("type") == "AUTH_RESP":
+                return True
+            else:
+                return False
+
+        def is_subscription_message():
+            if message.get("request", {}).get("op") == "subscribe" or \
+                    message.get("type") == "COMMAND_RESP":  # Private sub format
+                return True
+            else:
+                return False
+
+        if is_auth_message():
+            self._process_auth_message(message)
+        elif is_subscription_message():
+            self._process_subscription_message(message)
+        else:
+            self._process_normal_message(message)
+
+
+class _USDCOptionsWebSocketManager(_USDCWebSocketManager):
+    def _process_delta_orderbook(self, message, topic):
+        self._initialise_local_data(topic)
+
+        # Record the initial snapshot.
+        if "NEW" in message["data"]["dataType"]:
+            self.data[topic] = message["data"]["orderBook"]
+
+        # Make updates according to delta response.
+        elif "CHANGE" in message["data"]["dataType"]:
+
+            # Delete.
+            for entry in message["data"]["delete"]:
+                index = _helpers.find_index(self.data[topic], entry, "price")
+                self.data[topic].pop(index)
+
+            # Update.
+            for entry in message["data"]["update"]:
+                index = _helpers.find_index(self.data[topic], entry, "price")
+                self.data[topic][index] = entry
+
+            # Insert.
+            for entry in message["data"]["insert"]:
+                self.data[topic].append(entry)
+
+    def _process_normal_message(self, message):
+        topic = message["topic"]
+        if "delta.orderbook" in topic:
+            self._process_delta_orderbook(message, topic)
+            callback_data = copy.deepcopy(message)
+            callback_data["data"]["dataType"] = "NEW"
+            for key in ["delete", "update", "insert"]:
+                callback_data["data"].pop(key, "")
+            callback_data["data"]["orderBook"] = self.data[topic]
+        else:
+            callback_data = message
+        callback_function = self._get_callback(topic)
+        callback_function(callback_data)

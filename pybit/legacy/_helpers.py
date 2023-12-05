@@ -1,23 +1,13 @@
 import time
 import re
 import copy
-import requests
 
 
 def generate_timestamp():
-    attempt = 0
-    timedata = 0
-    while True and attempt < 12 :
-        try:
-            timedata = requests.get('https://api-testnet.bybit.com/v3/public/time')
-            break
-        except:
-            attempt += 1
-            time.sleep(1)
-    timestamp_offset = int(timedata.json()['result']['timeSecond']) - int(time.time() * 1000)
-    offset = int(time.time() * 1000 + timestamp_offset)
-    expires = str(offset)+"000"
-    return int(expires)
+    """
+    Return a millisecond integer timestamp.
+    """
+    return int(time.time() * 10 ** 3)
 
 
 def identify_ws_method(input_wss_url, wss_dictionary):
