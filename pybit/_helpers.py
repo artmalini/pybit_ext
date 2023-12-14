@@ -9,12 +9,18 @@ def generate_timestamp():
     timedata = 0
     while True and attempt < 12 :
         try:
-            timedata = requests.get('https://api-testnet.bybit.com/v3/public/time')
+            timedata = requests.get('https://api-testnet.bybit.com/v5/market/time')
             break
         except:
             attempt += 1
             time.sleep(1)
-    timestamp_offset = int(timedata.json()['result']['timeSecond']) - int(time.time() * 1000)
+
+    timestamp_offset = 0
+    try:
+        timestamp_offset = int(timedata.json()['result']['timeSecond']) - int(time.time() * 1000)
+    except Exception as e:
+        return int(time.time() * 10**3)
+    
     offset = int(time.time() * 1000 + timestamp_offset)
     expires = str(offset)+"000"
     return int(expires)
